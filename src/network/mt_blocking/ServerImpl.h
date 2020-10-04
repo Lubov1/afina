@@ -1,10 +1,12 @@
 #ifndef AFINA_NETWORK_MT_BLOCKING_SERVER_H
 #define AFINA_NETWORK_MT_BLOCKING_SERVER_H
 
+#include <afina/network/Server.h>
 #include <atomic>
+#include <set>
 #include <thread>
 
-#include <afina/network/Server.h>
+#include <condition_variable>
 
 namespace spdlog {
 class logger;
@@ -45,13 +47,25 @@ private:
     // Atomic flag to notify threads when it is time to stop. Note that
     // flag must be atomic in order to safely publisj changes cross thread
     // bounds
-    std::atomic<bool> running;
+    std::atomic<bool> _running;
 
     // Server socket to accept connections on
     int _server_socket;
 
     // Thread to run network on
     std::thread _thread;
+
+    // worker counter
+    std::atomic<int> _workers;
+
+    const int max_workers = 30;
+
+    std::condition_variable _alive_workers_number;
+    std::mutex _one_thread_stopped;
+
+    std::mutex _set_is_blocked;
+    std::set<int> _client_descriptors;
+    void user_handler(int client_socket);
 };
 
 } // namespace MTblocking
