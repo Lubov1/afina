@@ -1,3 +1,4 @@
+#include <utility>
 #ifndef AFINA_STORAGE_SIMPLE_LRU_H
 #define AFINA_STORAGE_SIMPLE_LRU_H
 
@@ -17,49 +18,70 @@ namespace Backend {
  */
 class SimpleLRU : public Afina::Storage {
 public:
-    SimpleLRU(size_t max_size = 1024) : _max_size(max_size) {}
+    SimpleLRU(size_t max_size = 1024) : _max_size(max_size) {
+        _current_size = 0;
+        _lru_head = std::unique_ptr<lru_node>(new lru_node);
+        _lru_head->prev = nullptr;
+
+        _lru_tail = new lru_node;
+        _lru_tail->next = nullptr;
+        _lru_head->next = std::unique_ptr<lru_node>(_lru_tail);
+        _lru_head->next->prev = _lru_head.get();
+    }
 
     ~SimpleLRU() {
         _lru_index.clear();
+        while (_lru_head.get() != _lru_tail) {
+            _lru_tail = _lru_tail->prev;
+            _lru_tail->next.reset();
+        }
         _lru_head.reset(); // TODO: Here is stack overflow
     }
 
     // Implements Afina::Storage interface
-    bool Put(const std::string &key, const std::string &value) override;
+    bool Put(const std::string &key, const std::string &value);
 
     // Implements Afina::Storage interface
-    bool PutIfAbsent(const std::string &key, const std::string &value) override;
+    bool PutIfAbsent(const std::string &key, const std::string &value);
 
     // Implements Afina::Storage interface
-    bool Set(const std::string &key, const std::string &value) override;
+    bool Set(const std::string &key, const std::string &value);
 
     // Implements Afina::Storage interface
-    bool Delete(const std::string &key) override;
+    bool Delete(const std::string &key);
 
     // Implements Afina::Storage interface
-    bool Get(const std::string &key, std::string &value) override;
+    bool Get(const std::string &key, std::string &value);
 
 private:
     // LRU cache node
     using lru_node = struct lru_node {
         std::string key;
         std::string value;
-        std::unique_ptr<lru_node> prev;
+        lru_node *prev;
         std::unique_ptr<lru_node> next;
     };
 
-    // Maximum number of bytes could be stored in this cache.
-    // i.e all (keys+values) must be less the _max_size
-    std::size_t _max_size;
+    bool del_oldest_node();
+    lru_node &create_new_node(std::string key, std::string value);
+    void move_to_tail(
+        std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>>::iterator iterator);
+    bool insert_new_node(const std::string &key, const std::string &value);
+    bool change_value(
+        std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>>::iterator iterator,
+        const std::string &value);
 
-    // Main storage of lru_nodes, elements in this list ordered descending by "freshness": in the head
-    // element that wasn't used for longest time.
-    //
-    // List owns all nodes
+    std::size_t _max_size;
+    std::size_t _current_size;
+
     std::unique_ptr<lru_node> _lru_head;
 
+    lru_node *_lru_tail;
+
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
-    std::map<std::reference_wrapper<std::string>, std::reference_wrapper<lru_node>, std::less<std::string>> _lru_index;
+    std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>, std::less<std::string>>
+        _lru_index;
+    using map_it = std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>>::iterator;
 };
 
 } // namespace Backend
