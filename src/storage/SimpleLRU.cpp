@@ -114,21 +114,12 @@ bool SimpleLRU::change_value(map_it iterator, const std::string &value) {
 
     if (current_node.key.size() - current_node.value.size() + value.size() > _max_size)
         return false;
+    move_to_tail(iterator);
 
     while (current_node.key.size() - current_node.value.size() + value.size() + _current_size > _max_size)
-        if (_lru_head->next->key == current_node.key) {
-            lru_node *old_node = _lru_head->next->next.get();
-            if (old_node == nullptr)
-                return false;
-            _current_size -= _lru_head->next->next->key.size() + _lru_head->next->next->value.size();
-            _lru_index.erase(old_node->key);
-            old_node->next->prev = _lru_head->next.get();
-            swap(_lru_head->next->next, old_node->next);
-            old_node->next = nullptr;
-        } else if (!del_oldest_node())
+        if (!del_oldest_node())
             return false;
     current_node.value = value;
-    move_to_tail(iterator);
     return true;
 }
 } // namespace Backend
