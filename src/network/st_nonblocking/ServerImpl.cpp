@@ -163,6 +163,7 @@ void ServerImpl::OnRun() {
                 }
 
                 close(pc->_socket);
+                client_connections.erase(pc);
                 pc->OnClose();
 
                 delete pc;
@@ -178,6 +179,11 @@ void ServerImpl::OnRun() {
             }
         }
     }
+    for (auto client : client_connections) {
+        close(client->_socket);
+        delete client;
+    }
+    client_connections.clear();
     _logger->warn("Acceptor stopped");
 }
 
@@ -207,16 +213,17 @@ void ServerImpl::OnNewConnection(int epoll_descr) {
         }
 
         // Register the new FD to be monitored by epoll.
-        Connection *pc = new(std::nothrow) Connection(infd);
+        Connection *pc = new(std::nothrow) Connection(infd, pStorage, _logger);
         if (pc == nullptr) {
             throw std::runtime_error("Failed to allocate connection");
         }
-
+        client_connections.insert(pc);
         // Register connection in worker's epoll
         pc->Start();
         if (pc->isAlive()) {
             if (epoll_ctl(epoll_descr, EPOLL_CTL_ADD, pc->_socket, &pc->_event)) {
                 pc->OnError();
+                 client_connections.erase(pc);
                 delete pc;
             }
         }
